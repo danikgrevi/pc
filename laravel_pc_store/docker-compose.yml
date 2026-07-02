@@ -1,0 +1,52 @@
+
+services:
+  # Сервис для приложения Laravel (PHP-FPM)
+  app:
+    build:
+      context: . # Собираем образ из Dockerfile в текущей директории
+      dockerfile: Dockerfile
+    container_name: laravel_app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www # Синхронизируем текущую папку с папкой в контейнере
+    networks:
+      - laravel_network
+
+  # Веб-сервер Nginx
+  webserver:
+    image: nginx:alpine
+    container_name: nginx_server
+    restart: unless-stopped
+    ports:
+      - "8020:80" # Пробрасываем порт 8000 локальной машины на порт 80 контейнера
+    volumes:
+      - ./:/var/www
+      - ./nginx/conf.d/:/etc/nginx/conf.d/ # Подключаем конфиг Nginx
+    networks:
+      - laravel_network
+    depends_on:
+      - app
+
+  # База данных MySQL
+  db:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: internetmarket
+      MYSQL_ROOT_PASSWORD: danikmc123
+    ports:
+      - "3307:3306" # Пробрасываем порт 3306 для подключения извне (например, из Workbench)
+    volumes:
+      - dbdata:/var/lib/mysql # Сохраняем данные БД в volume
+    networks:
+      - laravel_network
+
+# Определяем volumes и networks
+volumes:
+  dbdata:
+
+networks:
+  laravel_network:
+    driver: bridge

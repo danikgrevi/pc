@@ -1,0 +1,470 @@
+// src/pages/ProductsPage.jsx
+import React, { useState, useEffect } from 'react';
+import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
+import productService from '../services/productService';
+import { formatPrice } from '../utils/priceUtils';
+import { getProductImage, getFallbackImage } from '../utils/imageUtils';
+
+const ProductsPage = () => {
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('name');
+  const { addToCart } = useCart();
+  const { isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    loadProducts();
+    loadCategories();
+  }, []);
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await productService.getProducts();
+      console.log('📦 Products loaded:', response);
+      
+      const productsData = response.data || response;
+      setProducts(productsData);
+    } catch (error) {
+      console.error('❌ Error loading products:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const response = await productService.getCategories();
+      setCategories(response.data || response);
+    } catch (error) {
+      console.error('❌ Error loading categories:', error);
+    }
+  };
+
+  // Фильтрация и сортировка
+  const filteredAndSortedProducts = products
+    .filter(product => {
+      const matchesCategory = selectedCategory === 'all' || product.category?.name === selectedCategory;
+      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           product.description.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'price-low':
+          return a.price - b.price;
+        case 'price-high':
+          return b.price - a.price;
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'stock':
+          return b.stock - a.stock;
+        default:
+          return 0;
+      }
+    });
+
+  const handleAddToCart = async (product) => {
+    if (!isAuthenticated) {
+      alert('🔐 Пожалуйста, войдите в систему чтобы добавлять товары в корзину');
+      return;
+    }
+
+    try {
+      await addToCart(product.id, 1);
+      alert(`✅ Товар "${product.name}" добавлен в корзину!`);
+    } catch (error) {
+      alert(`❌ ${error?.error?.message || 'Ошибка при добавлении в корзину'}`);
+    }
+  };
+
+  const handleImageError = (e, product) => {
+    e.target.style.display = 'none';
+    const fallback = document.getElementById(`fallback-${product.id}`);
+    if (fallback) {
+      fallback.style.display = 'block';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '4rem 1rem', textAlign: 'center' }}>
+        <div style={{
+          width: '60px',
+          height: '60px',
+          border: '4px solid #e2e8f0',
+          borderTop: '4px solid #667eea',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          margin: '0 auto 2rem auto'
+        }}></div>
+        <p style={{ color: '#64748b', fontSize: '1.2rem' }}>Загружаем товары...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1rem' }}>
+      {/* Заголовок */}
+      <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+        <h1 style={{ 
+          fontSize: '3rem', 
+          marginBottom: '1rem',
+          fontWeight: '800'
+        }} className="text-gradient">
+          🔧 Комплектующие для ПК
+        </h1>
+        <p style={{ color: '#64748b', fontSize: '1.2rem' }}>
+          Найдите идеальные компоненты для вашей сборки
+        </p>
+      </div>
+      {/* Панель управления - поиск и сортировка */}
+      <div className="glass-card" style={{ 
+        padding: '1.5rem', 
+        marginBottom: '2rem',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '1rem',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        {/* Поиск */}
+        <div style={{ flex: '1', minWidth: '250px' }}>
+          <input
+            type="text"
+            placeholder="🔍 Поиск товаров..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '0.75rem 1rem',
+              border: '1px solid #d1d5db',
+              borderRadius: '8px',
+              fontSize: '1rem',
+              transition: 'all 0.3s ease'
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = '#667eea';
+              e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = '#d1d5db';
+              e.target.style.boxShadow = 'none';
+            }}
+          />
+        </div>
+
+        {/* Сортировка */}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span style={{ color: '#64748b', fontWeight: '500' }}>Сортировка:</span>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            style={{
+              padding: '0.5rem',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              background: 'white',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="name">По названию</option>
+            <option value="price-low">Цена (сначала дешевые)</option>
+            <option value="price-high">Цена (сначала дорогие)</option>
+            <option value="stock">По наличию</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Фильтры по категориям */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '0.75rem', 
+        justifyContent: 'center', 
+        marginBottom: '3rem',
+        flexWrap: 'wrap'
+      }}>
+        <button
+          onClick={() => setSelectedCategory('all')}
+          style={{
+            padding: '0.75rem 1.5rem',
+            background: selectedCategory === 'all' 
+              ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+              : 'white',
+            color: selectedCategory === 'all' ? 'white' : '#374151',
+            border: selectedCategory === 'all' ? 'none' : '1px solid #d1d5db',
+            borderRadius: '50px',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            fontWeight: '500',
+            boxShadow: selectedCategory === 'all' 
+              ? '0 4px 6px -1px rgba(102, 126, 234, 0.3)' 
+              : '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
+          }}
+        >
+          🌟 Все товары
+        </button>
+        
+        {categories.map(category => (
+          <button
+            key={category.id}
+            onClick={() => setSelectedCategory(category.name)}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: selectedCategory === category.name 
+                ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+                : 'white',
+              color: selectedCategory === category.name ? 'white' : '#374151',
+              border: selectedCategory === category.name ? 'none' : '1px solid #d1d5db',
+              borderRadius: '50px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              fontWeight: '500',
+              boxShadow: selectedCategory === category.name 
+                ? '0 4px 6px -1px rgba(102, 126, 234, 0.3)' 
+                : '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
+            }}
+          >
+            {category.name}
+          </button>
+        ))}
+      </div>
+      {/* Информация о результатах */}
+      <div style={{ 
+        textAlign: 'center', 
+        marginBottom: '2rem',
+        color: '#64748b'
+      }}>
+        Найдено товаров: <strong>{filteredAndSortedProducts.length}</strong>
+        {selectedCategory !== 'all' && `в категории "${selectedCategory}"`}
+        {searchTerm &&  `по запросу "${searchTerm}"`}
+      </div>
+
+      {/* Сетка товаров */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+        gap: '2rem'
+      }}>
+        {filteredAndSortedProducts.map((product, index) => (
+          <div 
+            key={product.id}
+            className="glass-card card-hover fade-in"
+            style={{ 
+              borderRadius: '16px',
+              overflow: 'hidden',
+              animationDelay: `${index * 0.1}s`,
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%'
+            }}
+          >
+            {/* Изображение товара */}
+            <div style={{
+              height: '220px',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              {/* Основное изображение */}
+              <img
+                src={getProductImage(product)}
+                alt={product.name}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  transition: 'transform 0.3s ease'
+                }}
+                onError={(e) => handleImageError(e, product)}
+                onMouseOver={(e) => {
+                  e.target.style.transform = 'scale(1.05)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.transform = 'scale(1)';
+                }}
+              />
+              
+              {/* Заглушка (скрыта по умолчанию) */}
+              <div 
+                id={`fallback-${product.id}`}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: `linear-gradient(135deg, #667eea 0%, #764ba2 100%), 
+                              url(${getFallbackImage()}) center/cover`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '4rem',
+                  color: 'white',
+                  display: 'none'
+                }}
+              >
+                {product.category?.name?.charAt(0) || '?'}
+              </div>
+
+              {/* Бейдж категории */}
+              <div style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                background: 'rgba(255, 255, 255, 0.95)',
+                color: '#1e293b',
+                padding: '0.4rem 1rem',
+                borderRadius: '20px',
+                fontSize: '0.8rem',
+                fontWeight: '600',
+                backdropFilter: 'blur(10px)',
+                zIndex: 2
+              }}>
+                {product.category?.name || 'Другое'}
+              </div>
+
+              {/* Бейдж акции/новинки */}
+              {product.stock > 0 && product.stock <= 5 && (
+                <div style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  left: '1rem',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: 'white',
+                  padding: '0.3rem 0.8rem',
+                  borderRadius: '12px',
+                  fontSize: '0.7rem',
+                  fontWeight: '600',
+                  zIndex: 2
+                }}>
+                  🏃‍♂️ Заканчивается
+                </div>
+              )}
+            </div>
+            {/* Информация о товаре */}
+            <div style={{ 
+              padding: '1.5rem', 
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              <h3 style={{ 
+                color: '#1e293b', 
+                marginBottom: '0.75rem',
+                fontSize: '1.25rem',
+                fontWeight: '700',
+                lineHeight: '1.4',
+                flex: 1
+              }}>
+                {product.name}
+              </h3>
+              
+              <p style={{ 
+                color: '#64748b', 
+                marginBottom: '1.5rem',
+                lineHeight: '1.5',
+                fontSize: '0.95rem',
+                flex: 2
+              }}>
+                {product.description}
+              </p>
+
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '1.5rem',
+                marginTop: 'auto'
+              }}>
+                <span style={{ 
+                  fontSize: '1.75rem', 
+                  fontWeight: '800', 
+                  color: '#1e293b'
+                }}>
+                  {formatPrice(product.price)}
+                </span>
+                <span style={{ 
+                  color: product.stock > 0 ? '#059669' : '#dc2626',
+                  fontWeight: '600',
+                  fontSize: '0.9rem',
+                  background: product.stock > 0 ? '#d1fae5' : '#fee2e2',
+                  padding: '0.25rem 0.75rem',
+                  borderRadius: '20px'
+                }}>
+                  {product.stock > 0 ? `✅ ${product.stock} в наличии` : '❌ Нет в наличии'}
+                </span>
+              </div>
+
+              <button 
+                onClick={() => handleAddToCart(product)}
+                disabled={product.stock === 0}
+                style={{
+                  width: '100%',
+                  padding: '0.875rem',
+                  background: product.stock > 0 
+                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+                    : '#9ca3af',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: product.stock > 0 ? 'pointer' : 'not-allowed',
+                  fontWeight: '600',
+                  fontSize: '1rem',
+                  transition: 'all 0.3s ease',
+                  opacity: product.stock > 0 ? 1 : 0.6
+                }}
+                onMouseOver={(e) => {
+                  if (product.stock > 0) {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.3)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (product.stock > 0) {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = 'none';
+                  }
+                }}
+              >
+                {product.stock > 0 ? '🛒 В корзину' : 'Нет в наличии'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Сообщение если товаров нет */}
+      {filteredAndSortedProducts.length === 0 && !loading && (
+        <div className="glass-card" style={{ 
+          textAlign: 'center', 
+          padding: '4rem 2rem',
+          color: '#64748b'
+        }}>
+          <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>🔍</div>
+          <h3 style={{ marginBottom: '1rem', color: '#374151' }}>Товары не найдены</h3>
+          <p style={{ marginBottom: '2rem' }}>
+            {searchTerm 
+              ? `По запросу "${searchTerm}" ничего не найдено`
+              : `В категории "${selectedCategory}" пока нет товаров`
+              }
+          </p>
+          <button 
+            onClick={() => {
+              setSearchTerm('');
+              setSelectedCategory('all');
+            }}
+            className="btn-primary"
+          >
+            📋 Показать все товары
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ProductsPage;
